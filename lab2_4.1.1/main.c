@@ -12,19 +12,15 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <math.h>
-#include <errno.h>
 
 #include "driverlib/gpio.h"
 #include "driverlib/pin_map.h"
-#include "driverlib/pwm.h"
 #include "driverlib/adc.h"
 #include "grlib/grlib.h"
 
 #include "utils/uartstdio.c"
-#include "drivers/buttons.h"
 #include "drivers/pinout.h"
 #include "drivers/CF128x128x16_ST7735S.h"
-#include "circular_queue.h"
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 
@@ -134,6 +130,7 @@ int main(void)
     // Ball
     tRectangle ball_rectangle;
     int16_t ball_size = 5;
+    int16_t ball_speed = 3;
     // ball direction works on a unit circle degrees logic, where origin is the ball, so 180 would mean the ball is traveling straight to the left
     int16_t ball_direction = 180;
     //-----------------------------------------------------------------------------
@@ -223,6 +220,7 @@ int main(void)
     ADCSequenceConfigure(ADC1_BASE, 0, ADC_TRIGGER_PROCESSOR, 0);
     ADCSequenceStepConfigure(ADC1_BASE, 0, 0, ADC_CTL_IE | ADC_CTL_END | ADC_CTL_CH9);
     ADCSequenceEnable(ADC1_BASE, 0);
+    //-----------------------------------------------------------------------------
 
     // Infinite loop
     while(1)
@@ -230,7 +228,7 @@ int main(void)
         left_points = 0;
         right_points = 0;
         // Loop for one game
-        while((left_points < 10) && (right_points < 10))
+        while((left_points < 3) && (right_points < 3))
         {
             // Clears/redraws the screen.
             CF128x128x16_ST7735SClear(background_color);
@@ -293,6 +291,7 @@ int main(void)
                 }
                 ADCSequenceDataGet(ADC0_BASE, 0, &joystick_val_ver);
 
+                // Convert joystick values from a 0 to 4095 range down to 0 to 100 range (percentage)
                 joystick_val_ver = roundf((100.0 / 4095.0) * joystick_val_ver);
                 //-----------------------------------------------------------------------------
                 // HORIZONTAL
@@ -304,6 +303,7 @@ int main(void)
                 }
                 ADCSequenceDataGet(ADC1_BASE, 0, &joystick_val_hor);
 
+                // Convert joystick values from a 0 to 4095 range down to 0 to 100 range (percentage)
                 joystick_val_hor = roundf((100.0 / 4095.0) * joystick_val_hor);
                 //-----------------------------------------------------------------------------
 
@@ -316,36 +316,36 @@ int main(void)
                 // Move straight right (east)
                 if(ball_direction == 0)
                 {
-                    ball_rectangle.i16XMin = ball_rectangle.i16XMin + ball_size;
+                    ball_rectangle.i16XMin = ball_rectangle.i16XMin + ball_speed;
                 }
                 // Move north east
                 else if (ball_direction == 45)
                 {
-                    ball_rectangle.i16XMin = ball_rectangle.i16XMin + ball_size;
-                    ball_rectangle.i16YMin = ball_rectangle.i16YMin - ball_size;
+                    ball_rectangle.i16XMin = ball_rectangle.i16XMin + ball_speed;
+                    ball_rectangle.i16YMin = ball_rectangle.i16YMin - ball_speed;
                 }
                 // Move north west
                 else if (ball_direction == 135)
                 {
-                    ball_rectangle.i16XMin = ball_rectangle.i16XMin - ball_size;
-                    ball_rectangle.i16YMin = ball_rectangle.i16YMin - ball_size;
+                    ball_rectangle.i16XMin = ball_rectangle.i16XMin - ball_speed;
+                    ball_rectangle.i16YMin = ball_rectangle.i16YMin - ball_speed;
                 }
                 // Move straight left (west)
                 else if (ball_direction == 180)
                 {
-                    ball_rectangle.i16XMin = ball_rectangle.i16XMin - ball_size;
+                    ball_rectangle.i16XMin = ball_rectangle.i16XMin - ball_speed;
                 }
                 // Move south west
                 else if (ball_direction == 225)
                 {
-                    ball_rectangle.i16XMin = ball_rectangle.i16XMin - ball_size;
-                    ball_rectangle.i16YMin = ball_rectangle.i16YMin + ball_size;
+                    ball_rectangle.i16XMin = ball_rectangle.i16XMin - ball_speed;
+                    ball_rectangle.i16YMin = ball_rectangle.i16YMin + ball_speed;
                 }
                 // Move south east
                 else if (ball_direction == 315)
                 {
-                    ball_rectangle.i16XMin = ball_rectangle.i16XMin + ball_size;
-                    ball_rectangle.i16YMin = ball_rectangle.i16YMin + ball_size;
+                    ball_rectangle.i16XMin = ball_rectangle.i16XMin + ball_speed;
+                    ball_rectangle.i16YMin = ball_rectangle.i16YMin + ball_speed;
 
                 }
                 // Update ball position and draw it
@@ -374,10 +374,12 @@ int main(void)
                     // Enable right
                     control_right = 1;
                 }
+                //-----------------------------------------------------------------------------
 
                 //-----------------------------------------------------------------------------
                 // Racket movement
                 //-----------------------------------------------------------------------------
+                // Control left racket
                 if(control_left == 1)
                 {
                     // Move racket up, unless it is at top (Y goes from 0 at top to 128 at bottom)
@@ -399,6 +401,7 @@ int main(void)
                         left_racket.i16YMax = left_racket.i16YMin + racket_height;
                     }
                 }
+                // Control right racket
                 else if(control_right == 1)
                 {
                     // Move racket up, unless it is at top (Y goes from 0 at top to 128 at bottom)
@@ -427,6 +430,7 @@ int main(void)
                 // Redraw/update right racket
                 GrContextForegroundSet(&context, pixel_color);
                 GrRectFill(&context, &right_racket);
+                //-----------------------------------------------------------------------------
 
                 //-----------------------------------------------------------------------------
                 // Racket ball logic
@@ -460,14 +464,14 @@ int main(void)
                 if (GrRectOverlapCheck(&right_racket, &ball_rectangle))
                 {
                     // If ball hits top part of racket
-                    if (ball_rectangle.i16YMin > left_racket.i16YMin + roundf((2.0/3.0)*racket_height))
+                    if (ball_rectangle.i16YMin > right_racket.i16YMin + roundf((2.0/3.0)*racket_height))
                     {
                         // Set direction to north west
                         //ball_direction = 135;
                         ball_direction = 225;
                     }
                     // If ball hits lower part of racket
-                    else if (ball_rectangle.i16YMin < left_racket.i16YMin + roundf((1.0/3.0)*racket_height))
+                    else if (ball_rectangle.i16YMin < right_racket.i16YMin + roundf((1.0/3.0)*racket_height))
                     {
                         // Set direction to south west
                         //ball_direction = 225;
@@ -560,7 +564,7 @@ int main(void)
                 // This function provides a means of generating a constant length
                 // delay.  The function delay (in cycles) = 3 * parameter.  Delay
                 // 0.125 seconds.
-                MAP_SysCtlDelay(systemClock / 40);
+                MAP_SysCtlDelay(systemClock / 80);
             }
         }
     }
