@@ -1,6 +1,7 @@
 #include<stdio.h>
 
-#define QUEUESIZE 40
+// Limited by RAM size
+#define QUEUESIZE 60
 
 typedef struct
 {

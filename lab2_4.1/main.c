@@ -12,20 +12,15 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <math.h>
-#include <errno.h>
 
 #include "driverlib/gpio.h"
 #include "driverlib/pin_map.h"
-#include "driverlib/pwm.h"
 #include "driverlib/adc.h"
 #include "grlib/grlib.h"
 
 #include "utils/uartstdio.c"
-#include "drivers/buttons.h"
 #include "drivers/pinout.h"
 #include "drivers/CF128x128x16_ST7735S.h"
-//#include "CF128x128x16_ST7735S.c"
-//#include "linked_list.h"
 #include "circular_queue.h"
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
@@ -72,10 +67,12 @@ int16_t check_rect_overlap_food(CircularQueue* q, int16_t size, tRectangle food_
         snake_part.i16YMax = snake_part.i16YMin + size;
         if(GrRectOverlapCheck(&food_rectangle, &snake_part))
         {
+            // Returns 1 if food overlaps with snake
             return 1;
         }
         temp = (temp + 1) % QUEUESIZE;
     }
+    // Returns 0 if food does not overlap with snake
     return 0;
 }
 //=============================================================================
@@ -104,10 +101,12 @@ int16_t check_rect_overlap_snake(CircularQueue* q, int16_t size)
         snake_part.i16YMax = snake_part.i16YMin + size;
         if(GrRectOverlapCheck(&snake_head, &snake_part))
         {
+            // Returns 1 if snake overlaps with itself
             return 1;
         }
         temp = (temp + 1) % QUEUESIZE;
     }
+    // Returns 0 if snake does not overlap itself
     return 0;
 }
 //=============================================================================
@@ -125,7 +124,8 @@ int main(void)
     uint32_t background_color = ClrBlack;
     uint32_t snake_color = ClrLime;
     uint32_t food_color = ClrRed;
-    uint32_t background_color_text = ClrSeashell;
+    uint32_t text_color = ClrWhite;
+    uint32_t background_color_text = ClrRed;
     // ui32Value is the 24-bit RGB color.  The least-significant byte is the
     // blue channel, the next byte is the green channel, and the third byte is the
     // red channel.
@@ -145,6 +145,7 @@ int main(void)
     tRectangle food_;
     int16_t food_size = 5;
     int16_t spawn_food = 1;
+    int16_t num_food_eaten = 0;
     //-----------------------------------------------------------------------------
 
     uint32_t joystick_val_ver;
@@ -206,11 +207,15 @@ int main(void)
     ADCSequenceConfigure(ADC1_BASE, 0, ADC_TRIGGER_PROCESSOR, 0);
     ADCSequenceStepConfigure(ADC1_BASE, 0, 0, ADC_CTL_IE | ADC_CTL_END | ADC_CTL_CH9);
     ADCSequenceEnable(ADC1_BASE, 0);
+    //-----------------------------------------------------------------------------
 
+    // Infinite while loop
     while(1)
     {
         // Enable spawning of food
         spawn_food = 1;
+        // Set number of food eaten to 0
+        num_food_eaten = 0;
 
         // Clears/redraws the screen.
         CF128x128x16_ST7735SClear(background_color);
@@ -222,7 +227,7 @@ int main(void)
         GrRectFill(&context, &snake_body);
         enqueue(&snake_queue, snake_body.i16XMin, snake_body.i16YMin);
 
-        // As long as you live (doesn't cross yourself or you go out of bound)
+        // While loop for one round, as long as you live (doesn't cross yourself or you go out of bound)
         while (1)
         {
             //-----------------------------------------------------------------------------
@@ -235,6 +240,7 @@ int main(void)
             }
             ADCSequenceDataGet(ADC0_BASE, 0, &joystick_val_ver);
 
+            // Convert joystick values from a 0 to 4095 range down to 0 to 100 range (percentage)
             joystick_val_ver = roundf((100.0 / 4095.0) * joystick_val_ver);
             //-----------------------------------------------------------------------------
             // HORIZONTAL
@@ -246,6 +252,7 @@ int main(void)
             }
             ADCSequenceDataGet(ADC1_BASE, 0, &joystick_val_hor);
 
+            // Convert joystick values from a 0 to 4095 range down to 0 to 100 range (percentage)
             joystick_val_hor = roundf((100.0 / 4095.0) * joystick_val_hor);
             //-----------------------------------------------------------------------------
 
@@ -397,11 +404,27 @@ int main(void)
                 GrRectFill(&context, &food_);
                 // Food has been consumed, enable spawning of food
                 spawn_food = 1;
+                num_food_eaten++;
                 // Set the color for pixels drawn
                 GrContextForegroundSet(&context, snake_color);
                 GrRectFill(&context, &snake_body);
                 // Skip next dequeue to simulate increased length of snake
                 skip_dequeue = 1;
+            }
+            if(num_food_eaten >= QUEUESIZE)
+            {
+                // Set the color for pixels drawn
+                GrContextForegroundSet(&context, text_color);
+                // Sets text background color behind text.
+                GrContextBackgroundSet(&context, background_color_text);
+                GrStringDrawCentered(&context, "Victory", -1, 64, 80, 1);
+
+                // This function provides a means of generating a constant length
+                // delay.  The function delay (in cycles) = 3 * parameter.  Delay
+                // 0.125 seconds.
+                MAP_SysCtlDelay(systemClock / 2);
+
+                break;
             }
             //-----------------------------------------------------------------------------
 
@@ -411,12 +434,7 @@ int main(void)
             // This function provides a means of generating a constant length
             // delay.  The function delay (in cycles) = 3 * parameter.  Delay
             // 0.125 seconds.
-            MAP_SysCtlDelay(systemClock / 24);
-
-            //CF128x128x16_ST7735SRectFill(context.psDisplay->pvDisplayData, &snake_body, snake_color);
-            //DpyRectFill(context.psDisplay->pvDisplayData, &snake_body, 1);
-            //GrPixelDraw(&context, 64, 64);
-            //CF128x128x16_ST7735SPixelDraw();
+            MAP_SysCtlDelay(systemClock / 30);
         }
     }
 }
