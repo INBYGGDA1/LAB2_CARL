@@ -12,19 +12,15 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <math.h>
-#include <errno.h>
 
 #include "driverlib/gpio.h"
 #include "driverlib/pin_map.h"
-#include "driverlib/pwm.h"
 #include "driverlib/adc.h"
 #include "grlib/grlib.h"
 
 #include "utils/uartstdio.c"
-#include "drivers/buttons.h"
 #include "drivers/pinout.h"
 #include "drivers/CF128x128x16_ST7735S.h"
-#include "circular_queue.h"
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 
@@ -137,6 +133,7 @@ int main(void)
     // Ball
     tRectangle ball_rectangle;
     int16_t ball_size = 5;
+    int16_t ball_speed = 1;
     int16_t num_balls = 5;
     // ball direction works on a unit circle degrees logic, where origin is the ball, so 90 would mean the ball is traveling straight up
     int16_t ball_direction;
@@ -144,7 +141,7 @@ int main(void)
     // Racket
     int16_t racket_height = 4;
     int16_t racket_width = 20;
-    int16_t racket_speed = 14;
+    int16_t racket_speed = 2;
     tRectangle bottom_racket;
     //-----------------------------------------------------------------------------
     // Bricks
@@ -286,6 +283,7 @@ int main(void)
                 }
                 ADCSequenceDataGet(ADC1_BASE, 0, &joystick_val_hor);
 
+                // Convert joystick values from a 0 to 4095 range down to 0 to 100 range (percentage)
                 joystick_val_hor = roundf((100.0 / 4095.0) * joystick_val_hor);
                 //-----------------------------------------------------------------------------
 
@@ -299,44 +297,45 @@ int main(void)
                 if(ball_direction == 90)
                 {
                     // Y goes from 0 at top, to 128 at bottom, thus we reduce to go up
-                    ball_rectangle.i16YMin = ball_rectangle.i16YMin - ball_size;
+                    ball_rectangle.i16YMin = ball_rectangle.i16YMin - ball_speed;
                 }
                 // Move north east
                 else if (ball_direction == 45)
                 {
-                    ball_rectangle.i16XMin = ball_rectangle.i16XMin + ball_size;
-                    ball_rectangle.i16YMin = ball_rectangle.i16YMin - ball_size;
+                    ball_rectangle.i16XMin = ball_rectangle.i16XMin + ball_speed;
+                    ball_rectangle.i16YMin = ball_rectangle.i16YMin - ball_speed;
                 }
                 // Move north west
                 else if (ball_direction == 135)
                 {
-                    ball_rectangle.i16XMin = ball_rectangle.i16XMin - ball_size;
-                    ball_rectangle.i16YMin = ball_rectangle.i16YMin - ball_size;
+                    ball_rectangle.i16XMin = ball_rectangle.i16XMin - ball_speed;
+                    ball_rectangle.i16YMin = ball_rectangle.i16YMin - ball_speed;
                 }
                 // Move straight down (south)
                 else if (ball_direction == 180)
                 {
                     // Y goes from 0 at top, to 128 at bottom, thus we increase to go down
-                    ball_rectangle.i16YMin = ball_rectangle.i16YMin + ball_size;
+                    ball_rectangle.i16YMin = ball_rectangle.i16YMin + ball_speed;
                 }
                 // Move south west
                 else if (ball_direction == 225)
                 {
-                    ball_rectangle.i16XMin = ball_rectangle.i16XMin - ball_size;
-                    ball_rectangle.i16YMin = ball_rectangle.i16YMin + ball_size;
+                    ball_rectangle.i16XMin = ball_rectangle.i16XMin - ball_speed;
+                    ball_rectangle.i16YMin = ball_rectangle.i16YMin + ball_speed;
                 }
                 // Move south east
                 else if (ball_direction == 315)
                 {
-                    ball_rectangle.i16XMin = ball_rectangle.i16XMin + ball_size;
-                    ball_rectangle.i16YMin = ball_rectangle.i16YMin + ball_size;
+                    ball_rectangle.i16XMin = ball_rectangle.i16XMin + ball_speed;
+                    ball_rectangle.i16YMin = ball_rectangle.i16YMin + ball_speed;
 
                 }
-                // Update ball position and draw it
+                // Update ball position
                 ball_rectangle.i16XMax = ball_rectangle.i16XMin + ball_size;
                 ball_rectangle.i16YMax = ball_rectangle.i16YMin + ball_size;
                 // Set the color for pixels drawn
                 GrContextForegroundSet(&context, racket_ball_color);
+                // Draw new position
                 GrRectFill(&context, &ball_rectangle);
                 //-----------------------------------------------------------------------------
 
@@ -384,20 +383,6 @@ int main(void)
                         // Set direction to north east
                         ball_direction = 45;
                     }
-                    /*
-                    // If ball hits right part of racket
-                    else if (ball_rectangle.i16XMin > (bottom_racket.i16XMin + roundf((2.0/3.0)*racket_width)))
-                    {
-                        // Set direction to north east
-                        ball_direction = 45;
-                    }
-                    // If ball hits middle of racket
-                    else
-                    {
-                        // Set direction to straight up (north)
-                        ball_direction = 90;
-                    }
-                    */
                 }
                 //-----------------------------------------------------------------------------
 
@@ -558,7 +543,7 @@ int main(void)
                 // This function provides a means of generating a constant length
                 // delay.  The function delay (in cycles) = 3 * parameter.  Delay
                 // 0.125 seconds.
-                MAP_SysCtlDelay(systemClock / 40);
+                MAP_SysCtlDelay(systemClock / 200);
             }
         }
     }
