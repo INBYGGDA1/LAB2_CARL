@@ -91,8 +91,8 @@ int main(void)
                                        {-10, -10}, {-10, -10}, {-10, -10}, {-10, -10}, {-10, -10}, {-10, -10}, {-10, -10}, {-10, -10}};
     //-----------------------------------------------------------------------------
 
-    uint32_t joystick_val_ver;
     uint32_t joystick_val_hor;
+    int32_t button_value;
 
     int16_t i;
 
@@ -115,24 +115,6 @@ int main(void)
     // Sets text background color behind text.
     GrContextBackgroundSet(&context, background_color_text);
     //-----------------------------------------------------------------------------
-    // VERTICAL
-    // Enable the ADC0 module.
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_ADC0);
-    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_ADC0))
-    {
-    }
-    // Enable port E, joystick vertical is on PE4.
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOE);
-    // Use joystick vertical (PE4) for interacting with LCD
-    GPIOPinTypeADC(GPIO_PORTE_BASE, GPIO_PIN_4);
-
-    // Enables trigger from ADC on the GPIO pin PE4 (joystick vertical)
-    // Enable the first sample sequencer to capture the value of channel 0 (PE4) (Should be PE3?) when
-    // the processor trigger occurs.
-    ADCSequenceConfigure(ADC0_BASE, 0, ADC_TRIGGER_PROCESSOR, 0);
-    ADCSequenceStepConfigure(ADC0_BASE, 0, 0, ADC_CTL_IE | ADC_CTL_END | ADC_CTL_CH0);
-    ADCSequenceEnable(ADC0_BASE, 0);
-    //-----------------------------------------------------------------------------
     // HORIZONTAL
     // Enable the ADC1 module.
     SysCtlPeripheralEnable(SYSCTL_PERIPH_ADC1);
@@ -150,6 +132,17 @@ int main(void)
     ADCSequenceConfigure(ADC1_BASE, 0, ADC_TRIGGER_PROCESSOR, 0);
     ADCSequenceStepConfigure(ADC1_BASE, 0, 0, ADC_CTL_IE | ADC_CTL_END | ADC_CTL_CH9);
     ADCSequenceEnable(ADC1_BASE, 0);
+    //-----------------------------------------------------------------------------
+    // Booster button
+    // Enable the GPIO port that is used for the on-board LED.
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOL);
+    // Check if the peripheral access is enabled.
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOL))
+    {
+        ;
+    }
+    // button is on (PL2)
+    GPIOPinTypeGPIOInput(GPIO_PORTL_BASE, GPIO_PIN_2);
     //-----------------------------------------------------------------------------
 
     // Infinite loop
@@ -179,26 +172,12 @@ int main(void)
         // No laser has been shot
         laser_active = 0;
         // These are set to avoid values from last loop persisting and having an effect on the new loop
-        ADCSequenceDataGet(ADC0_BASE, 0, &joystick_val_ver);
-        joystick_val_ver = 50;
         ADCSequenceDataGet(ADC1_BASE, 0, &joystick_val_hor);
         joystick_val_hor = 50;
 
         // Loop for one round
         while(1)
         {
-            //-----------------------------------------------------------------------------
-            // VERTICAL
-            // Wait for joystick trigger and then get value.
-            GPIOPinTypeADC(GPIO_PORTE_BASE, GPIO_PIN_4);
-            ADCProcessorTrigger(ADC0_BASE, 0);
-            while (!ADCIntStatus(ADC0_BASE, 0, false))
-            {
-            }
-            ADCSequenceDataGet(ADC0_BASE, 0, &joystick_val_ver);
-
-            // Convert joystick values from a 0 to 4095 range down to 0 to 100 range (percentage)
-            joystick_val_ver = roundf((100.0 / 4095.0) * joystick_val_ver);
             //-----------------------------------------------------------------------------
             // HORIZONTAL
             // Wait for joystick trigger and then get value.
@@ -211,6 +190,10 @@ int main(void)
 
             // Convert joystick values from a 0 to 4095 range down to 0 to 100 range (percentage)
             joystick_val_hor = roundf((100.0 / 4095.0) * joystick_val_hor);
+            //-----------------------------------------------------------------------------
+            // Read button value
+            // Button is on PL2
+            button_value = GPIOPinRead(GPIO_PORTL_BASE, GPIO_PIN_2);
             //-----------------------------------------------------------------------------
 
             //-----------------------------------------------------------------------------
@@ -249,7 +232,8 @@ int main(void)
             // Laser
             //-----------------------------------------------------------------------------
             // Shoot laser
-            if ((joystick_val_ver > 70) && (laser_active == 0))
+            // Button PL2 is on pin 2 which is bit 2 which in binary is 00000100 which is 4 in decimal
+            if ((button_value != 4) && (laser_active == 0))
             {
                 // Laser spawns in the middle front of the ship
                 laser_rectangle.i16XMin = ship_rectangle.i16XMin + floor(ship_size / 2.0);
